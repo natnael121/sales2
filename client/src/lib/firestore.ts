@@ -135,6 +135,11 @@ export const updateLead = async (id: string, data: Partial<InsertLead>): Promise
   });
 };
 
+export const deleteLead = async (id: string): Promise<void> => {
+  const docRef = doc(db, "leads", id);
+  await deleteDoc(docRef);
+};
+
 export const getLeadsByOrganization = async (organizationId: string): Promise<Lead[]> => {
   const q = query(
     collection(db, "leads"), 
