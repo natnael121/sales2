@@ -130,6 +130,24 @@ class RocketChatService {
     }
   }
 
+  // Create private group via backend API
+  async createPrivateGroup(name: string, usernames: string[]): Promise<string | null> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/chat/rooms/group`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name, usernames }),
+      });
+      const data = await response.json();
+      return data.success ? data.roomId : null;
+    } catch (error) {
+      console.error('Failed to create private group:', error);
+      return null;
+    }
+  }
+
   // Get connection status
   isConnected(): boolean {
     return this.connected;

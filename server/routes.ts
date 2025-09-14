@@ -109,6 +109,20 @@ class RocketChatService {
       return [];
     }
   }
+
+  async createPrivateGroup(name: string, usernames: string[]): Promise<string | null> {
+    try {
+      if (!this.connected) await this.connect();
+      const result = await this.api.post('groups.create', {
+        name: name,
+        members: usernames
+      }, true);
+      return result.group?._id || null;
+    } catch (error) {
+      console.error('Failed to create private group:', error);
+      return null;
+    }
+  }
 }
 
 const rocketChatService = new RocketChatService();
@@ -139,6 +153,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     } catch (error) {
       res.status(500).json({ success: false, error: 'Failed to create direct message' });
+    }
+  });
+
+  app.post('/api/chat/rooms/group', async (req, res) => {
+    try {
+      const { name, usernames } = req.body;
+      if (!name || !Array.isArray(usernames)) {
+        return res.status(400).json({ success: false, error: 'Group name and usernames array required' });
+      }
+      
+      const roomId = await rocketChatService.createPrivateGroup(name, usernames);
+      if (roomId) {
+        res.json({ success: true, roomId });
+      } else {
+        res.status(500).json({ success: false, error: 'Failed to create group' });
+      }
+    } catch (error) {
+      res.status(500).json({ success: false, error: 'Failed to create private group' });
     }
   });
 
