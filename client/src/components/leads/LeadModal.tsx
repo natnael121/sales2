@@ -59,7 +59,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
       status: "new",
       source: "",
       notes: "",
-      assignedToId: ""
+      assignedToId: "unassigned"
     }
   });
 
@@ -75,7 +75,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         status: lead.status,
         source: lead.source || "",
         notes: lead.notes || "",
-        assignedToId: lead.assignedToId || ""
+        assignedToId: lead.assignedToId || "unassigned"
       });
     } else if (isOpen && mode === "create") {
       form.reset({
@@ -87,7 +87,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         status: "new",
         source: "",
         notes: "",
-        assignedToId: ""
+        assignedToId: "unassigned"
       });
     }
   }, [isOpen, lead, mode, form]);
@@ -113,7 +113,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
         company: data.company || undefined,
         source: data.source || undefined,
         notes: data.notes || undefined,
-        assignedToId: data.assignedToId || undefined
+        assignedToId: data.assignedToId === "unassigned" ? undefined : data.assignedToId
       };
 
       if (mode === "create") {
@@ -279,7 +279,7 @@ export const LeadModal: React.FC<LeadModalProps> = ({
                   <SelectValue placeholder="Select agent..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Unassigned</SelectItem>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
                   {agents.map((agent) => (
                     <SelectItem key={agent.id} value={agent.id}>
                       {agent.name} ({agent.role})
