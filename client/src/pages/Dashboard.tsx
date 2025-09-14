@@ -6,15 +6,18 @@ import { Leaderboard } from "../components/dashboard/Leaderboard";
 import { RecentActivity } from "../components/dashboard/RecentActivity";
 import { QuickActions } from "../components/dashboard/QuickActions";
 import { ChatWidget } from "../components/chat/ChatWidget";
+import { LeadModal } from "../components/leads/LeadModal";
 import { useAuth } from "../hooks/useAuth";
 import { useLeads } from "../hooks/useFirestore";
 import { getUsersByOrganization } from "../lib/firestore";
+import { useToast } from "../hooks/use-toast";
 import type { 
   DashboardMetrics, 
   ConversionFunnelData, 
   TopPerformer, 
   RecentActivityItem,
-  User 
+  User,
+  Lead 
 } from "../types";
 
 export default function Dashboard() {
@@ -35,6 +38,12 @@ export default function Dashboard() {
   const [topPerformers, setTopPerformers] = useState<TopPerformer[]>([]);
   const [recentActivity, setRecentActivity] = useState<RecentActivityItem[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  
+  // LeadModal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedLead, setSelectedLead] = useState<Lead | undefined>();
+  const [modalMode, setModalMode] = useState<"create" | "edit" | "view">("create");
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -145,6 +154,37 @@ export default function Dashboard() {
     }
   };
 
+  // Quick Action handlers
+  const handleAddLead = () => {
+    setSelectedLead(undefined);
+    setModalMode("create");
+    setModalOpen(true);
+  };
+
+  const handleImportLeads = () => {
+    // TODO: Implement lead import functionality
+    toast({
+      title: "Coming Soon",
+      description: "Lead import functionality will be available soon.",
+    });
+  };
+
+  const handleAddTeamMember = () => {
+    // TODO: Implement add team member functionality
+    toast({
+      title: "Coming Soon",
+      description: "Add team member functionality will be available soon.",
+    });
+  };
+
+  const handleConfigureTargets = () => {
+    // TODO: Implement configure targets functionality
+    toast({
+      title: "Coming Soon",
+      description: "Configure targets functionality will be available soon.",
+    });
+  };
+
   if (!currentUser) return null;
 
   return (
@@ -164,11 +204,23 @@ export default function Dashboard() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <RecentActivity activities={recentActivity} />
-            <QuickActions />
+            <QuickActions 
+              onAddLead={handleAddLead}
+              onImportLeads={handleImportLeads}
+              onAddTeamMember={handleAddTeamMember}
+              onConfigureTargets={handleConfigureTargets}
+            />
           </div>
         </div>
       </Layout>
       <ChatWidget />
+      <LeadModal 
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        agents={users.filter(user => ["call-center", "field-agent", "supervisor"].includes(user.role))}
+        mode={modalMode}
+        lead={selectedLead}
+      />
     </>
   );
 }
