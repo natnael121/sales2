@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import type { Lead, Meeting, Commission, ChatMessage } from "../types";
+import type { Lead, Meeting, Commission, ChatMessage, Call } from "../types";
 import * as firestore from "../lib/firestore";
 
 export const useLeads = (organizationId: string) => {
@@ -85,4 +85,57 @@ export const useChatMessages = (organizationId: string) => {
   }, [organizationId]);
 
   return { messages, loading };
+};
+
+// Organization-level hooks for analytics
+export const useCalls = (organizationId: string) => {
+  const [calls, setCalls] = useState<Call[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!organizationId) return;
+
+    const fetchCalls = async () => {
+      try {
+        const data = await firestore.getCallsByOrganization(organizationId);
+        setCalls(data);
+        setLoading(false);
+      } catch (error) {
+        console.error("Error fetching calls:", error);
+        setError("Failed to fetch calls");
+        setLoading(false);
+      }
+    };
+
+    fetchCalls();
+  }, [organizationId]);
+
+  return { calls, loading, error };
+};
+
+export const useOrganizationMeetings = (organizationId: string) => {
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!organizationId) return;
+
+    const fetchMeetings = async () => {
+      try {
+        const data = await firestore.getMeetingsByOrganization(organizationId);
+        setMeetings(data);
+        setLoading(false);
+      } catch (error) {
+        console.error("Error fetching organization meetings:", error);
+        setError("Failed to fetch meetings");
+        setLoading(false);
+      }
+    };
+
+    fetchMeetings();
+  }, [organizationId]);
+
+  return { meetings, loading, error };
 };

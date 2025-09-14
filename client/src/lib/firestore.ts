@@ -193,6 +193,34 @@ export const getCallsByLead = async (leadId: string): Promise<Call[]> => {
   })) as Call[];
 };
 
+export const getCallsByAgent = async (agentId: string): Promise<Call[]> => {
+  const q = query(
+    collection(db, "calls"), 
+    where("agentId", "==", agentId),
+    orderBy("createdAt", "desc")
+  );
+  const querySnapshot = await getDocs(q);
+  
+  return querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...convertTimestamps(doc.data())
+  })) as Call[];
+};
+
+export const getCallsByOrganization = async (organizationId: string): Promise<Call[]> => {
+  const q = query(
+    collection(db, "calls"), 
+    where("organizationId", "==", organizationId),
+    orderBy("createdAt", "desc")
+  );
+  const querySnapshot = await getDocs(q);
+  
+  return querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...convertTimestamps(doc.data())
+  })) as Call[];
+};
+
 // Meetings
 export const createMeeting = async (data: InsertMeeting): Promise<Meeting> => {
   const docRef = await addDoc(collection(db, "meetings"), {
@@ -218,6 +246,20 @@ export const getMeetingsByAgent = async (agentId: string): Promise<Meeting[]> =>
     collection(db, "meetings"), 
     where("fieldAgentId", "==", agentId),
     orderBy("scheduledAt", "asc")
+  );
+  const querySnapshot = await getDocs(q);
+  
+  return querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...convertTimestamps(doc.data())
+  })) as Meeting[];
+};
+
+export const getMeetingsByOrganization = async (organizationId: string): Promise<Meeting[]> => {
+  const q = query(
+    collection(db, "meetings"), 
+    where("organizationId", "==", organizationId),
+    orderBy("createdAt", "desc")
   );
   const querySnapshot = await getDocs(q);
   
