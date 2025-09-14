@@ -12,6 +12,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/use-toast";
+import { createLead } from "../lib/firestore";
+import { parseExcelFile, createSampleExcelFile } from "../lib/excel-import";
+import { ImportResultsModal } from "../components/settings/ImportResultsModal";
+import type { ImportResult } from "../lib/excel-import";
 import { 
   Settings as SettingsIcon, 
   Users, 
@@ -31,6 +35,9 @@ export default function Settings() {
   const { currentUser } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
 
   // Organization Settings
   const [orgSettings, setOrgSettings] = useState({
@@ -117,21 +124,87 @@ export default function Settings() {
   };
 
   const handleLeadImport = () => {
-    // This will trigger the lead import functionality
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.xlsx,.xls,.csv';
-    input.onchange = (e) => {
+    input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        // TODO: Implement Excel import logic
-        toast({
-          title: "Lead Import",
-          description: `Importing leads from ${file.name}...`,
-        });
+      if (file && currentUser?.organizationId) {
+        setLoading(true);
+        try {
+          toast({
+            title: "Processing File",
+            description: `Parsing ${file.name}...`,
+          });
+          
+          const result = await parseExcelFile(file, currentUser.organizationId);
+          setImportResult(result);
+          setShowImportModal(true);
+        } catch (error) {
+          toast({
+            title: "Import Error",
+            description: "Failed to parse Excel file. Please check the format.",
+            variant: "destructive"
+          });
+        } finally {
+          setLoading(false);
+        }
       }
     };
     input.click();
+  };
+
+  const handleDownloadTemplate = () => {
+    try {
+      createSampleExcelFile();
+      toast({
+        title: "Template Downloaded",
+        description: "Sample Excel template has been downloaded to your computer.",
+      });
+    } catch (error) {
+      toast({
+        title: "Download Error",
+        description: "Failed to download template. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    if (!importResult || !currentUser?.organizationId) return;
+
+    setImportLoading(true);
+    try {
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const leadData of importResult.validLeads) {
+        try {
+          await createLead(leadData);
+          successCount++;
+        } catch (error) {
+          errorCount++;
+          console.error('Error creating lead:', error);
+        }
+      }
+
+      toast({
+        title: "Import Complete",
+        description: `Successfully imported ${successCount} leads. ${errorCount > 0 ? `${errorCount} failed.` : ''}`,
+        variant: errorCount > 0 ? "destructive" : "default"
+      });
+
+      setShowImportModal(false);
+      setImportResult(null);
+    } catch (error) {
+      toast({
+        title: "Import Failed",
+        description: "Failed to import leads. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setImportLoading(false);
+    }
   };
 
   if (!currentUser || currentUser.role !== "admin") {
@@ -278,23 +351,40 @@ export default function Settings() {
 
                 <div className="space-y-4">
                   <h4 className="font-semibold">Data Management</h4>
-                  <div className="flex flex-wrap gap-3">
-                    <Button 
-                      onClick={handleLeadImport} 
-                      className="flex items-center gap-2"
-                      data-testid="button-import-leads"
-                    >
-                      <Upload className="h-4 w-4" />
-                      Import Leads from Excel
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      className="flex items-center gap-2"
-                      data-testid="button-export-leads"
-                    >
-                      <Download className="h-4 w-4" />
-                      Export All Data
-                    </Button>
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-3">
+                      <Button 
+                        onClick={handleLeadImport} 
+                        className="flex items-center gap-2"
+                        disabled={loading}
+                        data-testid="button-import-leads"
+                      >
+                        <Upload className="h-4 w-4" />
+                        {loading ? "Processing..." : "Import Leads from Excel"}
+                      </Button>
+                      <Button 
+                        onClick={handleDownloadTemplate}
+                        variant="outline" 
+                        className="flex items-center gap-2"
+                        data-testid="button-download-template"
+                      >
+                        <Download className="h-4 w-4" />
+                        Download Template
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        className="flex items-center gap-2"
+                        data-testid="button-export-leads"
+                      >
+                        <Download className="h-4 w-4" />
+                        Export All Data
+                      </Button>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      <p>• Supported formats: Excel (.xlsx, .xls) and CSV (.csv)</p>
+                      <p>• Required column: Name</p>
+                      <p>• Optional columns: Email, Phone, Company, Estimated Value, Status, Source, Notes</p>
+                    </div>
                   </div>
                 </div>
 
@@ -745,6 +835,17 @@ export default function Settings() {
           </TabsContent>
         </Tabs>
       </div>
+      
+      <ImportResultsModal
+        isOpen={showImportModal}
+        onClose={() => {
+          setShowImportModal(false);
+          setImportResult(null);
+        }}
+        result={importResult}
+        onConfirmImport={handleConfirmImport}
+        loading={importLoading}
+      />
     </Layout>
   );
 }
