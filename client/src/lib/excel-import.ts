@@ -22,6 +22,15 @@ export interface ImportResult {
   totalRows: number;
   validLeads: InsertLead[];
   errors: ImportError[];
+  duplicates?: DuplicateInfo[];
+}
+
+export interface DuplicateInfo {
+  row: number;
+  lead: InsertLead;
+  duplicateType: 'internal' | 'external';
+  matchedFields: string[];
+  existingLeadId?: string;
 }
 
 export interface ImportError {
@@ -79,7 +88,84 @@ const validateLeadStatus = (status: string): LeadStatus => {
   return statusMappings[normalizedStatus] || 'new';
 };
 
-export const parseExcelFile = async (file: File, organizationId: string): Promise<ImportResult> => {
+// Function to normalize values for duplicate detection
+const normalizeForComparison = (value?: string): string => {
+  if (!value) return '';
+  return value.toLowerCase().trim().replace(/\s+/g, ' ');
+};
+
+// Function to detect duplicates within the leads array
+const detectInternalDuplicates = (leads: (InsertLead & { rowNumber: number })[]): DuplicateInfo[] => {
+  const seen = new Map<string, { lead: InsertLead; rowNumber: number }>();
+  const duplicates: DuplicateInfo[] = [];
+
+  for (const leadWithRow of leads) {
+    const { rowNumber, ...lead } = leadWithRow;
+    const matchedFields: string[] = [];
+    let isDuplicate = false;
+
+    // Create composite keys for different matching scenarios
+    const emailKey = lead.email ? normalizeForComparison(lead.email) : '';
+    const phoneKey = lead.phone ? normalizeForComparison(lead.phone) : '';
+    const nameKey = normalizeForComparison(lead.name);
+
+    // Check for exact email match
+    if (emailKey) {
+      const existingByEmail = Array.from(seen.values()).find(item => 
+        item.lead.email && normalizeForComparison(item.lead.email) === emailKey
+      );
+      if (existingByEmail) {
+        matchedFields.push('email');
+        isDuplicate = true;
+      }
+    }
+
+    // Check for exact phone match
+    if (phoneKey) {
+      const existingByPhone = Array.from(seen.values()).find(item => 
+        item.lead.phone && normalizeForComparison(item.lead.phone) === phoneKey
+      );
+      if (existingByPhone) {
+        matchedFields.push('phone');
+        isDuplicate = true;
+      }
+    }
+
+    // Check for name and company combination
+    const companyKey = normalizeForComparison(lead.company);
+    if (nameKey && companyKey) {
+      const existingByNameCompany = Array.from(seen.values()).find(item => 
+        normalizeForComparison(item.lead.name) === nameKey && 
+        normalizeForComparison(item.lead.company) === companyKey
+      );
+      if (existingByNameCompany) {
+        matchedFields.push('name', 'company');
+        isDuplicate = true;
+      }
+    }
+
+    if (isDuplicate) {
+      duplicates.push({
+        row: rowNumber,
+        lead,
+        duplicateType: 'internal',
+        matchedFields
+      });
+    } else {
+      // Store this lead for future duplicate checking
+      const compositeKey = `${nameKey}|${emailKey}|${phoneKey}|${companyKey}`;
+      seen.set(compositeKey, { lead, rowNumber });
+    }
+  }
+
+  return duplicates;
+};
+
+export const parseExcelFile = async (
+  file: File, 
+  organizationId: string, 
+  existingLeads: InsertLead[] = []
+): Promise<ImportResult> => {
   return new Promise((resolve) => {
     const reader = new FileReader();
     
@@ -132,7 +218,7 @@ export const parseExcelFile = async (file: File, organizationId: string): Promis
           return;
         }
         
-        const validLeads: InsertLead[] = [];
+        const validLeadsWithRows: (InsertLead & { rowNumber: number })[] = [];
         const errors: ImportError[] = [];
         
         // Process data rows (skip header)
@@ -184,7 +270,7 @@ export const parseExcelFile = async (file: File, organizationId: string): Promis
                 estimatedValue: typeof cleanedData.estimatedValue === 'number' ? cleanedData.estimatedValue : undefined
               };
               
-              validLeads.push(lead);
+              validLeadsWithRows.push({ ...lead, rowNumber: i + 1 });
             } else {
               // Collect validation errors
               validationResult.error.errors.forEach(error => {
@@ -203,11 +289,72 @@ export const parseExcelFile = async (file: File, organizationId: string): Promis
           }
         }
         
+        // Detect internal duplicates within the uploaded file
+        const internalDuplicates = detectInternalDuplicates(validLeadsWithRows);
+        
+        // Detect external duplicates against existing leads
+        const externalDuplicates: DuplicateInfo[] = [];
+        for (const leadWithRow of validLeadsWithRows) {
+          const { rowNumber, ...lead } = leadWithRow;
+          const matchedFields: string[] = [];
+          let existingLeadId: string | undefined;
+
+          // Check against existing leads in the database
+          const duplicateExisting = existingLeads.find(existing => {
+            const fieldsMatch: string[] = [];
+            
+            // Check email match
+            if (lead.email && existing.email && 
+                normalizeForComparison(lead.email) === normalizeForComparison(existing.email)) {
+              fieldsMatch.push('email');
+            }
+            
+            // Check phone match
+            if (lead.phone && existing.phone && 
+                normalizeForComparison(lead.phone) === normalizeForComparison(existing.phone)) {
+              fieldsMatch.push('phone');
+            }
+            
+            // Check name and company combination
+            if (normalizeForComparison(lead.name) === normalizeForComparison(existing.name) &&
+                lead.company && existing.company &&
+                normalizeForComparison(lead.company) === normalizeForComparison(existing.company)) {
+              fieldsMatch.push('name', 'company');
+            }
+            
+            if (fieldsMatch.length > 0) {
+              matchedFields.push(...fieldsMatch);
+              return true;
+            }
+            return false;
+          });
+
+          if (duplicateExisting) {
+            externalDuplicates.push({
+              row: rowNumber,
+              lead,
+              duplicateType: 'external',
+              matchedFields,
+              existingLeadId: duplicateExisting.id
+            });
+          }
+        }
+        
+        // Combine all duplicates
+        const allDuplicates = [...internalDuplicates, ...externalDuplicates];
+        
+        // Remove duplicates from valid leads
+        const duplicateRows = new Set(allDuplicates.map(d => d.row));
+        const finalValidLeads = validLeadsWithRows
+          .filter(leadWithRow => !duplicateRows.has(leadWithRow.rowNumber))
+          .map(({ rowNumber, ...lead }) => lead);
+        
         resolve({
-          success: validLeads.length > 0,
+          success: finalValidLeads.length > 0 || allDuplicates.length > 0,
           totalRows: jsonData.length - 1, // Excluding header
-          validLeads,
-          errors
+          validLeads: finalValidLeads,
+          errors,
+          duplicates: allDuplicates.length > 0 ? allDuplicates : undefined
         });
         
       } catch (error) {

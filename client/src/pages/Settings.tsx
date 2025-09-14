@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/use-toast";
-import { createLead } from "../lib/firestore";
+import { createLead, getLeadsByOrganization } from "../lib/firestore";
 import { parseExcelFile, createSampleExcelFile } from "../lib/excel-import";
 import { ImportResultsModal } from "../components/settings/ImportResultsModal";
 import type { ImportResult } from "../lib/excel-import";
@@ -134,10 +134,12 @@ export default function Settings() {
         try {
           toast({
             title: "Processing File",
-            description: `Parsing ${file.name}...`,
+            description: `Parsing ${file.name} and checking for duplicates...`,
           });
           
-          const result = await parseExcelFile(file, currentUser.organizationId);
+          // Fetch existing leads for duplicate detection
+          const existingLeads = await getLeadsByOrganization(currentUser.organizationId);
+          const result = await parseExcelFile(file, currentUser.organizationId, existingLeads);
           setImportResult(result);
           setShowImportModal(true);
         } catch (error) {
