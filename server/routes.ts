@@ -1,133 +1,21 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import * as RocketChat from '@rocket.chat/sdk';
-
-// Rocket.Chat service class for server-side integration
-class RocketChatService {
-  private driver: any = null;
-  private api: any = null;
-  private connected: boolean = false;
-  private currentUserId: string | null = null;
-  private config = {
-    host: process.env.ROCKETCHAT_HOST || 'localhost:3000',
-    useSsl: process.env.ROCKETCHAT_USE_SSL === 'true',
-    username: process.env.ROCKETCHAT_USERNAME || 'admin',
-    password: process.env.ROCKETCHAT_PASSWORD || 'demo123'
-  };
-
-  async connect(): Promise<boolean> {
-    try {
-      if (this.connected) return true;
-
-      this.driver = await RocketChat.driver.connect({ host: this.config.host });
-      this.api = RocketChat.api;
-      
-      await this.driver.login({ 
-        username: this.config.username, 
-        password: this.config.password 
-      });
-      
-      this.currentUserId = await this.driver.userId();
-      this.connected = true;
-      
-      return true;
-    } catch (error) {
-      console.error('Failed to connect to Rocket.Chat:', error);
-      return false;
-    }
-  }
-
-  async disconnect(): Promise<void> {
-    try {
-      if (this.driver && this.connected) {
-        await this.driver.logout();
-        this.connected = false;
-        this.currentUserId = null;
-      }
-    } catch (error) {
-      console.error('Failed to disconnect:', error);
-    }
-  }
-
-  async getRooms(): Promise<any[]> {
-    try {
-      if (!this.connected) await this.connect();
-      const rooms = await this.api.get('rooms.get', {}, true);
-      return rooms.update || [];
-    } catch (error) {
-      console.error('Failed to get rooms:', error);
-      return [];
-    }
-  }
-
-  async createDirectMessage(username: string): Promise<string | null> {
-    try {
-      if (!this.connected) await this.connect();
-      const result = await this.api.post('im.create', { username }, true);
-      return result.room?._id || null;
-    } catch (error) {
-      console.error('Failed to create direct message:', error);
-      return null;
-    }
-  }
-
-  async sendMessage(roomId: string, message: string): Promise<boolean> {
-    try {
-      if (!this.connected) await this.connect();
-      await this.driver.sendToRoom(roomId, message);
-      return true;
-    } catch (error) {
-      console.error('Failed to send message:', error);
-      return false;
-    }
-  }
-
-  async getRoomMessages(roomId: string, count: number = 50): Promise<any[]> {
-    try {
-      if (!this.connected) await this.connect();
-      const result = await this.api.get('rooms.messages', { roomId, count }, true);
-      return result.messages || [];
-    } catch (error) {
-      console.error('Failed to get room messages:', error);
-      return [];
-    }
-  }
-
-  async searchUsers(query: string): Promise<any[]> {
-    try {
-      if (!this.connected) await this.connect();
-      const result = await this.api.get('users.list', {
-        query: { $or: [
-          { username: { $regex: query, $options: 'i' } },
-          { name: { $regex: query, $options: 'i' } }
-        ]}
-      }, true);
-      return result.users || [];
-    } catch (error) {
-      console.error('Failed to search users:', error);
-      return [];
-    }
-  }
-
-  async createPrivateGroup(name: string, usernames: string[]): Promise<string | null> {
-    try {
-      if (!this.connected) await this.connect();
-      const result = await this.api.post('groups.create', {
-        name: name,
-        members: usernames
-      }, true);
-      return result.group?._id || null;
-    } catch (error) {
-      console.error('Failed to create private group:', error);
-      return null;
-    }
-  }
-}
-
-const rocketChatService = new RocketChatService();
+import { rocketChatService } from "./rocketchat";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Health check endpoint
+  app.get('/api/health', (req, res) => {
+    res.json({ 
+      status: 'ok', 
+      timestamp: new Date().toISOString(),
+      services: {
+        database: 'connected',
+        rocketchat: rocketChatService.isConnected() ? 'connected' : 'disconnected'
+      }
+    });
+  });
+
   // Rocket.Chat API routes
   app.get('/api/chat/rooms', async (req, res) => {
     try {
@@ -221,9 +109,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/chat/connection', async (req, res) => {
     try {
       const connected = await rocketChatService.connect();
-      res.json({ success: true, connected });
+      res.json({ 
+        success: true, 
+        connected,
+        timestamp: new Date().toISOString()
+      });
     } catch (error) {
-      res.status(500).json({ success: false, connected: false, error: 'Connection failed' });
+      console.error('Chat connection error:', error);
+      res.status(500).json({ 
+        success: false, 
+        connected: false, 
+        error: 'Connection failed',
+        timestamp: new Date().toISOString()
+      });
     }
   });
 

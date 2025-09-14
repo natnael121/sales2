@@ -5,7 +5,6 @@ import { ConversionFunnel } from "../components/dashboard/ConversionFunnel";
 import { Leaderboard } from "../components/dashboard/Leaderboard";
 import { RecentActivity } from "../components/dashboard/RecentActivity";
 import { QuickActions } from "../components/dashboard/QuickActions";
-import { ChatWidget } from "../components/chat/ChatWidget";
 import { LeadModal } from "../components/leads/LeadModal";
 import { useAuth } from "../hooks/useAuth";
 import { useLeads } from "../hooks/useFirestore";
@@ -213,7 +212,6 @@ export default function Dashboard() {
           </div>
         </div>
       </Layout>
-      <ChatWidget />
       <LeadModal 
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}

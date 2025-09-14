@@ -1,6 +1,11 @@
 // Backend-based Rocket.Chat client for browser compatibility
 // Uses API calls to backend instead of direct SDK
 
+interface RocketChatConfig {
+  baseUrl: string;
+  timeout: number;
+}
+
 export interface RocketChatRoom {
   _id: string;
   name: string;
@@ -38,21 +43,53 @@ export interface RocketChatMessage {
 
 class RocketChatService {
   private connected: boolean = false;
-  private baseUrl: string;
+  private config: RocketChatConfig;
 
   constructor() {
-    this.baseUrl = window.location.origin; // Use same origin for API calls
+    this.config = {
+      baseUrl: window.location.origin,
+      timeout: 10000 // 10 seconds
+    };
+  }
+
+  private async makeRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
+
+    try {
+      const response = await fetch(`${this.config.baseUrl}${endpoint}`, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('Request timeout - please check your connection');
+      }
+      throw error;
+    }
   }
 
   // Check connection status via backend
   async connect(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/chat/connection`);
-      const data = await response.json();
+      const data = await this.makeRequest('/api/chat/connection');
       this.connected = data.connected;
       return data.connected;
     } catch (error) {
-      console.error('Failed to check connection:', error);
+      console.error('Failed to connect to chat service:', error);
       this.connected = false;
       return false;
     }
@@ -61,8 +98,7 @@ class RocketChatService {
   // Get all rooms via backend API
   async getRooms(): Promise<RocketChatRoom[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/chat/rooms`);
-      const data = await response.json();
+      const data = await this.makeRequest('/api/chat/rooms');
       return data.success ? data.rooms : [];
     } catch (error) {
       console.error('Failed to get rooms:', error);
@@ -73,14 +109,10 @@ class RocketChatService {
   // Create a direct message room via backend API
   async createDirectMessage(username: string): Promise<string | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/chat/rooms/direct`, {
+      const data = await this.makeRequest('/api/chat/rooms/direct', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ username }),
       });
-      const data = await response.json();
       return data.success ? data.roomId : null;
     } catch (error) {
       console.error('Failed to create direct message:', error);
@@ -91,14 +123,10 @@ class RocketChatService {
   // Send a message via backend API
   async sendMessage(roomId: string, message: string): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/chat/messages`, {
+      const data = await this.makeRequest('/api/chat/messages', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ roomId, message }),
       });
-      const data = await response.json();
       return data.success;
     } catch (error) {
       console.error('Failed to send message:', error);
@@ -109,8 +137,7 @@ class RocketChatService {
   // Get room messages via backend API
   async getRoomMessages(roomId: string, count: number = 50): Promise<RocketChatMessage[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/chat/messages/${roomId}?count=${count}`);
-      const data = await response.json();
+      const data = await this.makeRequest(`/api/chat/messages/${roomId}?count=${count}`);
       return data.success ? data.messages : [];
     } catch (error) {
       console.error('Failed to get room messages:', error);
@@ -121,8 +148,7 @@ class RocketChatService {
   // Search for users via backend API
   async searchUsers(query: string): Promise<any[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/chat/users/search?q=${encodeURIComponent(query)}`);
-      const data = await response.json();
+      const data = await this.makeRequest(`/api/chat/users/search?q=${encodeURIComponent(query)}`);
       return data.success ? data.users : [];
     } catch (error) {
       console.error('Failed to search users:', error);
@@ -133,14 +159,10 @@ class RocketChatService {
   // Create private group via backend API
   async createPrivateGroup(name: string, usernames: string[]): Promise<string | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/chat/rooms/group`, {
+      const data = await this.makeRequest('/api/chat/rooms/group', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ name, usernames }),
       });
-      const data = await response.json();
       return data.success ? data.roomId : null;
     } catch (error) {
       console.error('Failed to create private group:', error);
@@ -156,6 +178,7 @@ class RocketChatService {
   // Placeholder methods for compatibility
   async disconnect(): Promise<void> {
     this.connected = false;
+    console.log('Disconnected from chat service');
   }
 
   // For real-time updates, we'd implement WebSocket or polling
@@ -168,6 +191,17 @@ class RocketChatService {
 
   getCurrentUserId(): string | null {
     return null; // Would be implemented with proper auth
+  }
+
+  // Health check method
+  async healthCheck(): Promise<boolean> {
+    try {
+      const data = await this.makeRequest('/api/health');
+      return data.status === 'ok' && data.services?.rocketchat === 'connected';
+    } catch (error) {
+      console.error('Health check failed:', error);
+      return false;
+    }
   }
 }
 

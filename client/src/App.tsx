@@ -7,6 +7,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { useAuth } from "./hooks/useAuth";
 import { LoginModal } from "./components/auth/LoginModal";
+import { ChatWidget } from "./components/chat/ChatWidget";
 import Dashboard from "./pages/Dashboard";
 import Leads from "./pages/Leads";
 import Calls from "./pages/Calls";
@@ -72,6 +73,7 @@ function AppContent() {
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
+    <ChatWidget />
   );
 }
 

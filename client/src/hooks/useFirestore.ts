@@ -72,19 +72,27 @@ export const useCommissions = (userId: string) => {
 export const useChatMessages = (organizationId: string) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!organizationId) return;
 
-    const unsubscribe = firestore.subscribeToChatMessages(organizationId, (newMessages) => {
-      setMessages(newMessages);
-      setLoading(false);
-    });
+    try {
+      const unsubscribe = firestore.subscribeToChatMessages(organizationId, (newMessages) => {
+        setMessages(newMessages);
+        setLoading(false);
+        setError(null);
+      });
 
-    return unsubscribe;
+      return unsubscribe;
+    } catch (err: any) {
+      console.error("Error subscribing to chat messages:", err);
+      setError(err.message || "Failed to load chat messages");
+      setLoading(false);
+    }
   }, [organizationId]);
 
-  return { messages, loading };
+  return { messages, loading, error };
 };
 
 // Organization-level hooks for analytics

@@ -88,22 +88,6 @@ export const Sidebar: React.FC = () => {
       </nav>
 
       {/* Chat Link */}
-      <div className="px-4 py-2">
-        <Link href="/chat">
-          <a 
-            className={cn(
-              "flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors",
-              location === "/chat"
-                ? "bg-primary text-primary-foreground" 
-                : "text-muted-foreground hover:text-foreground hover:bg-accent"
-            )}
-            data-testid="nav-chat"
-          >
-            <MessageSquare className="w-5 h-5" />
-            <span>Chat</span>
-          </a>
-        </Link>
-      </div>
 
       {/* User Profile */}
       <div className="p-4 border-t border-border">
