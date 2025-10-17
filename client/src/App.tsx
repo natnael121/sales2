@@ -63,17 +63,19 @@ function AppContent() {
   }
 
   return (
-    <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/leads" component={Leads} />
-      <Route path="/calls" component={Calls} />
-      <Route path="/meetings" component={Meetings} />
-      <Route path="/commissions" component={Commissions} />
-      <Route path="/analytics" component={Analytics} />
-      <Route path="/settings" component={Settings} />
-      <Route component={NotFound} />
-    </Switch>
-    <ChatWidget />
+    <>
+      <Switch>
+        <Route path="/" component={Dashboard} />
+        <Route path="/leads" component={Leads} />
+        <Route path="/calls" component={Calls} />
+        <Route path="/meetings" component={Meetings} />
+        <Route path="/commissions" component={Commissions} />
+        <Route path="/analytics" component={Analytics} />
+        <Route path="/settings" component={Settings} />
+        <Route component={NotFound} />
+      </Switch>
+      <ChatWidget />
+    </>
   );
 }
 
